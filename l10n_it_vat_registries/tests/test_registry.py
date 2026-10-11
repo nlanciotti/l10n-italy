@@ -5,19 +5,21 @@ from zipfile import ZipFile
 
 from odoo import fields
 from odoo.fields import Command
-from odoo.tests import Form
+from odoo.tests import Form, tagged
 from odoo.tests.common import TransactionCase
 
+from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 
-class TestRegistry(TransactionCase):
+
+@tagged("post_install", "-at_install")
+class TestRegistry(AccountTestInvoicingCommon):
     @classmethod
+    @AccountTestInvoicingCommon.setup_country("it")
     def setUpClass(cls):
         super().setUpClass()
 
         cls.test_date = fields.Date.today()
-        cls.journal = cls.env["account.journal"].search(
-            [("type", "=", "sale")], limit=1
-        )
+        cls.journal = cls.company_data["default_journal_sale"]
         cls.ova = cls.env["account.account"].search(
             [("account_type", "=", "asset_current")],
             limit=1,
@@ -27,6 +29,7 @@ class TestRegistry(TransactionCase):
                 "name": "Tax 10.0",
                 "amount": 10.0,
                 "amount_type": "fixed",
+                "company_id": cls.company_data["company"].id,
             }
         )
         cls.tax_registry = cls.env["account.tax.registry"].create(
@@ -37,14 +40,7 @@ class TestRegistry(TransactionCase):
             }
         )
 
-        cls.invoice_line_account = (
-            cls.env["account.account"]
-            .search(
-                [("account_type", "=", "expense")],
-                limit=1,
-            )
-            .id
-        )
+        cls.invoice_line_account = cls.company_data["default_account_expense"].id
 
         cls.partner = cls.env["res.partner"].create(
             {
