@@ -8,6 +8,7 @@ from datetime import datetime
 
 from dateutil.rrule import MONTHLY
 
+from odoo import Command
 from odoo.tests import Form, tagged
 from odoo.tools import pdf
 
@@ -144,3 +145,63 @@ class TestCentralJournalReportlab(AccountTestInvoicingCommon):
             if not has_move and out_invoice.name in page_content:
                 has_move = True
         self.assertTrue(has_move)
+
+    def test_account_name_missing_company_lang(self):
+        """Accounts lacking a name in the company language are printed in en_US."""
+        # Arrange
+        self.env["res.lang"]._activate_lang("it_IT")
+        self.it_company.partner_id.lang = "it_IT"
+        account_name = "EN Only Account"
+        account = (
+            self.env["account.account"]
+            .with_context(lang="en_US")
+            .create(
+                {
+                    "name": account_name,
+                    "code": "998877",
+                    "account_type": "income",
+                    "company_ids": [Command.set(self.it_company.ids)],
+                }
+            )
+        )
+        out_invoice = self.env["account.move"].create(
+            {
+                "move_type": "out_invoice",
+                "partner_id": self.partner.id,
+                "invoice_date": self.today,
+                "invoice_line_ids": [
+                    Command.create(
+                        {
+                            "name": "Test line",
+                            "account_id": account.id,
+                            "price_unit": 100,
+                        }
+                    )
+                ],
+            }
+        )
+        out_invoice.action_post()
+        # pre-condition
+        self.env.flush_all()
+        self.env.cr.execute(
+            "SELECT name FROM account_account WHERE id = %s", (account.id,)
+        )
+        self.assertEqual(self.env.cr.fetchone()[0], {"en_US": account_name})
+        self.assertIn(account, out_invoice.invoice_line_ids.account_id)
+
+        for group_by_account in (False, True):
+            with self.subTest(group_by_account=group_by_account):
+                # Act
+                wizard_form = Form(self.wizard_model)
+                wizard_form.daterange_id = self.current_period
+                wizard_form.group_by_account = group_by_account
+                wizard = wizard_form.save()
+                wizard.print_giornale_reportlab()
+
+                # Assert
+                giornale_pdf_content = base64.b64decode(wizard.report_giornale)
+                giornale_content = pdf.PdfFileReader(io.BytesIO(giornale_pdf_content))
+                giornale_text = "".join(
+                    page.extractText() for page in giornale_content.pages
+                )
+                self.assertIn(account_name, giornale_text)
