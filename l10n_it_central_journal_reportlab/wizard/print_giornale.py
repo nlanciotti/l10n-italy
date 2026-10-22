@@ -241,6 +241,17 @@ class WizardGiornaleReportlab(models.TransientModel):
     def _get_account_name_reportlab(self, line):
         return " - ".join(filter(None, [line.account_id.code, line.account_id.name]))
 
+    @api.model
+    def _get_account_name_lang(self, account_name, lang):
+        """Return the account name in `lang`, falling back to en_US as the ORM does.
+
+        `account_name` is the raw JSONB value of `account_account.name`, which
+        may lack the `lang` key (e.g. an account created only in en_US).
+        """
+        if not account_name:
+            return ""
+        return account_name.get(lang) or account_name.get("en_US") or ""
+
     def get_template_header_report_giornale(self, report, height_available):
         report.setFont("Helvetica-Bold", 12)
         height_available -= gap
@@ -397,12 +408,11 @@ class WizardGiornaleReportlab(models.TransientModel):
             start_row += 1
             account_name = (
                 account_dict[line["account_id"]] + " - " + line["account_name"]
-                and line["account_name"][user_lang]
-                or ""
+                and self._get_account_name_lang(line["account_name"], user_lang)
                 if account_dict
                 and "line_id" in account_dict.keys()
                 and "account_id" in account_dict[line].keys()
-                else line["account_name"] and line["account_name"][user_lang] or ""
+                else self._get_account_name_lang(line["account_name"], user_lang)
             )
             if not account_name:
                 continue
@@ -477,12 +487,11 @@ class WizardGiornaleReportlab(models.TransientModel):
             start_row += 1
             account_name = (
                 account_dict[line["account_id"]] + " - " + line["account_name"]
-                and line["account_name"][user_lang]
-                or ""
+                and self._get_account_name_lang(line["account_name"], user_lang)
                 if account_dict
                 and "line_id" in account_dict.keys()
                 and "account_id" in account_dict[line].keys()
-                else line["account_name"] and line["account_name"][user_lang] or ""
+                else self._get_account_name_lang(line["account_name"], user_lang)
             )
             if not account_name:
                 continue
